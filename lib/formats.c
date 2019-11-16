@@ -195,6 +195,36 @@ void rm_fmt_remove_by_name(RmFmtTable *self, char *name) {
     g_hash_table_remove(self->handler_set, name);
 }
 
+
+// NOTE: This is the same as g_date_time_format_iso8601.
+// It is only copied here because it is only available since
+// GLib 2.62. Remove this in a few years (written as of end 2019)
+gchar *rm_date_time_format_iso8601(GDateTime *datetime) {
+    GString *outstr = NULL;
+    gchar *main_date = NULL;
+    gint64 offset;
+
+    /* Main date and time. */
+    main_date = g_date_time_format(datetime, "%Y-%m-%dT%H:%M:%S");
+    outstr = g_string_new(main_date);
+    g_free(main_date);
+
+    /* Timezone. Format it as `%:::z` unless the offset is zero, in which case
+     * we can simply use `Z`. */
+    offset = g_date_time_get_utc_offset(datetime);
+
+    if(offset == 0) {
+        g_string_append_c(outstr, 'Z');
+    } else {
+        gchar *time_zone = g_date_time_format(datetime, "%:::z");
+        g_string_append (outstr, time_zone);
+        g_free (time_zone);
+    }
+
+    return g_string_free(outstr, FALSE);
+}
+
+
 void rm_fmt_clear(RmFmtTable *self) {
     if(rm_fmt_len(self) <= 0) {
         return;
@@ -208,12 +238,12 @@ void rm_fmt_clear(RmFmtTable *self) {
 }
 
 void rm_fmt_backup_old_result_file(RmFmtTable *self, const char *old_path) {
-    if(self->first_backup_timestamp.tv_sec == 0L) {
-        g_get_current_time(&self->first_backup_timestamp);
+    if(self->first_backup_timestamp == NULL) {
+        self->first_backup_timestamp = g_date_time_new_now_utc();
     }
 
     char *new_path = NULL;
-    char *timestamp = g_time_val_to_iso8601(&self->first_backup_timestamp);
+    char *timestamp = rm_date_time_format_iso8601(self->first_backup_timestamp);
 
     // Split the extension, if possible and place it before the timestamp suffix.
     char *extension = g_utf8_strrchr(old_path, -1, '.');
@@ -442,6 +472,11 @@ void rm_fmt_close(RmFmtTable *self) {
     g_hash_table_unref(self->handler_set);
     g_queue_free(self->handler_order);
     g_rec_mutex_clear(&self->state_mtx);
+
+    if(self->first_backup_timestamp) {
+        g_date_time_unref(self->first_backup_timestamp);
+    }
+
     g_slice_free(RmFmtTable, self);
 }
 
