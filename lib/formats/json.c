@@ -267,6 +267,16 @@ static void rm_fmt_elem(RmSession *session, _UNUSED RmFmtHandler *parent, FILE *
                 return;
             }
         }
+
+        if(session->cfg->keep_all_tagged && !file->is_prefd) {
+            /* don't list 'untagged' files as unique */
+            file->is_original = false;
+        } else if(session->cfg->keep_all_untagged && file->is_prefd) {
+            /* don't list 'tagged' files as unique */
+            file->is_original = false;
+        } else {
+            file->is_original = true;
+        }
     }
 
     char *checksum_str = NULL;
@@ -313,21 +323,23 @@ static void rm_fmt_elem(RmSession *session, _UNUSED RmFmtHandler *parent, FILE *
 
         rm_fmt_json_key_unsafe(out, "path", file_path);
         rm_fmt_json_sep(self, out);
+        rm_fmt_json_key_int(out, "size", file->actual_file_size);
+        rm_fmt_json_sep(self, out);
+        rm_fmt_json_key_int(out, "depth", file->depth);
+        rm_fmt_json_sep(self, out);
+        rm_fmt_json_key_int(out, "inode", file->inode);
+        rm_fmt_json_sep(self, out);
+        rm_fmt_json_key_int(out, "disk_id", file->dev);
+        rm_fmt_json_sep(self, out);
+        rm_fmt_json_key_bool(out, "is_original", file->is_original);
+        rm_fmt_json_sep(self, out);
+
         if(file->lint_type != RM_LINT_TYPE_UNIQUE_FILE) {
-            rm_fmt_json_key_int(out, "size", file->actual_file_size);
-            rm_fmt_json_sep(self, out);
             if(file->twin_count >= 0) {
                 rm_fmt_json_key_int(out, "twins", file->twin_count);
                 rm_fmt_json_sep(self, out);
             }
-            rm_fmt_json_key_int(out, "depth", file->depth);
-            rm_fmt_json_sep(self, out);
-            rm_fmt_json_key_int(out, "inode", file->inode);
-            rm_fmt_json_sep(self, out);
-            rm_fmt_json_key_int(out, "disk_id", file->dev);
-            rm_fmt_json_sep(self, out);
-            rm_fmt_json_key_bool(out, "is_original", file->is_original);
-            rm_fmt_json_sep(self, out);
+
 
 			if(file->lint_type == RM_LINT_TYPE_PART_OF_DIRECTORY && file->parent_dir) {
 				rm_fmt_json_key(out, "parent_path", rm_directory_get_dirname(file->parent_dir));
@@ -353,6 +365,7 @@ static void rm_fmt_elem(RmSession *session, _UNUSED RmFmtHandler *parent, FILE *
                 }
             }
         }
+
         rm_fmt_json_key_float(out, "mtime", file->mtime);
     }
     rm_fmt_json_close(self, out);
