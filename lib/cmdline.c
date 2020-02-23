@@ -475,6 +475,7 @@ static bool rm_cmd_read_paths_from_stdin(RmSession *session, bool is_prefd,
             if (path_buf[path_len - 1] == delim) {
                 path_buf[path_len - 1] = 0;
             }
+
             all_paths_read &= rm_cfg_add_path(session->cfg, is_prefd, path_buf);
         }
     }
@@ -626,6 +627,41 @@ static void rm_cmd_parse_clamp_option(RmSession *session, const char *string,
     }
 }
 
+static gboolean rm_cmd_parse_partial_hidden(_UNUSED const char *option_name,
+                                            _UNUSED const gchar *count,
+                                            RmSession *session, _UNUSED GError **error) {
+    RmCfg *cfg = session->cfg;
+    cfg->ignore_hidden = false;
+    cfg->partial_hidden = true;
+
+    return true;
+}
+
+static gboolean rm_cmd_parse_merge_directories(_UNUSED const char *option_name,
+                                               _UNUSED const gchar *_,
+                                               RmSession *session,
+                                               _UNUSED GError **error) {
+    RmCfg *cfg = session->cfg;
+    cfg->merge_directories = true;
+
+    /* Pull in some options for convenience,
+     * duplicate dir detection works better with them.
+     *
+     * They may be disabled explicitly though.
+     */
+    cfg->follow_symlinks = false;
+    cfg->see_symlinks = true;
+    rm_cmd_parse_partial_hidden(NULL, NULL, session, error);
+
+    cfg->find_hardlinked_dupes = true;
+
+    /* Keep RmFiles after shredder. */
+    cfg->cache_file_structs = true;
+
+    return true;
+}
+
+
 /* parse comma-separated strong of lint types and set cfg accordingly */
 typedef struct RmLintTypeOption {
     const char **names;
@@ -753,9 +789,7 @@ static gboolean rm_cmd_parse_lint_types(_UNUSED const char *option_name,
     }
 
     if(cfg->merge_directories) {
-        cfg->ignore_hidden = false;
-        cfg->find_hardlinked_dupes = true;
-        cfg->cache_file_structs = true;
+        rm_cmd_parse_merge_directories(NULL, NULL, session, NULL);
     }
 
     /* clean up */
@@ -1042,16 +1076,6 @@ static gboolean rm_cmd_parse_less_paranoid(_UNUSED const char *option_name,
     return true;
 }
 
-static gboolean rm_cmd_parse_partial_hidden(_UNUSED const char *option_name,
-                                            _UNUSED const gchar *count,
-                                            RmSession *session, _UNUSED GError **error) {
-    RmCfg *cfg = session->cfg;
-    cfg->ignore_hidden = false;
-    cfg->partial_hidden = true;
-
-    return true;
-}
-
 static gboolean rm_cmd_parse_see_symlinks(_UNUSED const char *option_name,
                                           _UNUSED const gchar *count, RmSession *session,
                                           _UNUSED GError **error) {
@@ -1092,29 +1116,6 @@ static gboolean rm_cmd_parse_no_partial_hidden(_UNUSED const char *option_name,
 
     return true;
 }
-
-static gboolean rm_cmd_parse_merge_directories(_UNUSED const char *option_name,
-                                               _UNUSED const gchar *_,
-                                               RmSession *session,
-                                               _UNUSED GError **error) {
-    RmCfg *cfg = session->cfg;
-    cfg->merge_directories = true;
-
-    /* Pull in some options for convenience,
-     * duplicate dir detection works better with them.
-     *
-     * They may be disabled explicitly though.
-     */
-    cfg->follow_symlinks = false;
-    cfg->see_symlinks = true;
-    rm_cmd_parse_partial_hidden(NULL, NULL, session, error);
-
-    /* Keep RmFiles after shredder. */
-    cfg->cache_file_structs = true;
-
-    return true;
-}
-
 static gboolean rm_cmd_parse_hidden(_UNUSED const char *option_name,
                                                _UNUSED const gchar *_,
                                                RmSession *session,
@@ -1439,7 +1440,7 @@ bool rm_cmd_parse_args(int argc, char **argv, RmSession *session) {
         {"partial-hidden"           , 0    , EMPTY     , G_OPTION_ARG_CALLBACK  , FUNC(partial_hidden)           , _("Find hidden files in duplicate folders only")                          , NULL}     ,
         {"mtime-window"             , 'Z'  , 0         , G_OPTION_ARG_DOUBLE    , &cfg->mtime_window             , _("Consider duplicates only equal when mtime differs at max. T seconds")  , "T"}      ,
         {"stdin0"                   , '0'  , 0         , G_OPTION_ARG_NONE      , &cfg->read_stdin0              , _("Read null-separated file list from stdin")                             , NULL}     ,
-        {"no-backup"                , 0    , 0         , G_OPTION_ARG_NONE      , &cfg->no_backup                , _("Do not create backups of previous result files")                       , NULL}     ,
+        {"backup"                   , 0    , 0         , G_OPTION_ARG_NONE      , &cfg->backup                   , _("Do create backups of previous result files")                           , NULL}     ,
 
         /* COW filesystem deduplication support */
         {"dedupe"                   , 0    , 0         , G_OPTION_ARG_NONE      , &cfg->dedupe                   , _("Dedupe matching extents from source to dest (if filesystem supports)") , NULL}     ,

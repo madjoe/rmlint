@@ -108,7 +108,7 @@ guint rm_cfg_add_path(RmCfg *cfg, bool is_prefd, const char *path) {
     int rc = 0;
 
 #if HAVE_FACCESSAT
-    rc = faccessat(AT_FDCWD, path, R_OK, AT_EACCESS);
+    rc = faccessat(AT_FDCWD, path, R_OK, AT_EACCESS|AT_SYMLINK_NOFOLLOW);
 #else
     rc = access(path, R_OK);
 #endif
@@ -119,11 +119,16 @@ guint rm_cfg_add_path(RmCfg *cfg, bool is_prefd, const char *path) {
         return 0;
     }
 
+    bool realpath_worked = true;
     char *real_path = realpath(path, NULL);
     if(real_path == NULL) {
-        rm_log_warning_line(_("Can't get real path for directory or file \"%s\": %s"),
+        rm_log_debug_line(_("Can't get real path for directory or file \"%s\": %s"),
                             path, strerror(errno));
-        return 0;
+
+        /* Continue with the path we got,
+         * this is likely a bad symbolic link */
+        real_path = g_canonicalize_filename(path, NULL);
+        realpath_worked = false;
     }
 
     RmPath *rmpath = g_slice_new(RmPath);
@@ -131,6 +136,7 @@ guint rm_cfg_add_path(RmCfg *cfg, bool is_prefd, const char *path) {
     rmpath->is_prefd = is_prefd;
     rmpath->idx = cfg->path_count;
     rmpath->treat_as_single_vol = strncmp(path, "//", 2) == 0;
+    rmpath->realpath_worked = realpath_worked;
 
     if(cfg->replay && g_str_has_suffix(rmpath->path, ".json")) {
         cfg->json_paths = g_slist_prepend(cfg->json_paths, rmpath);
